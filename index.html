@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Jetpack Joyride with Shooting</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas {
+      border: 2px solid white;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const player = {
+      x: 50,
+      y: 300,
+      width: 40,
+      height: 40,
+      velocityY: 0,
+      gravity: 0.5,
+      lift: -10,
+      color: "yellow"
+    };
+
+    let keys = {};
+    let bgX = 0;
+    const bgSpeed = 2;
+    let isGameOver = false;
+
+    const bgImage = new Image();
+    bgImage.src = "background.png";
+
+    let bullets = [];
+    let obstacles = [];
+    let particles = [];
+    let obstacleTimer = 0;
+
+    document.addEventListener("keydown", e => keys[e.code] = true);
+    document.addEventListener("keyup", e => keys[e.code] = false);
+
+    document.addEventListener("keydown", e => {
+      if (e.code === "Space") shootBullet();
+    });
+
+    function updatePlayer() {
+      if (keys["ArrowUp"]) {
+        player.velocityY = player.lift;
+      }
+
+      player.velocityY += player.gravity;
+      player.y += player.velocityY;
+
+      if (player.y + player.height > canvas.height) {
+        player.y = canvas.height - player.height;
+        player.velocityY = 0;
+      }
+
+      if (player.y < 0) {
+        player.y = 0;
+        player.velocityY = 0;
+      }
+    }
+
+    function shootBullet() {
+      bullets.push({
+        x: player.x + player.width / 2 - 5,
+        y: player.y + player.height,
+        width: 10,
+        height: 20,
+        speed: 7
+      });
+    }
+
+    function updateBullets() {
+      bullets.forEach(b => b.y += b.speed);
+      bullets = bullets.filter(b => b.y < canvas.height);
+    }
+
+    function drawBullets() {
+      ctx.fillStyle = "white";
+      bullets.forEach(b => {
+        ctx.fillRect(b.x, b.y, b.width, b.height);
+      });
+    }
+
+    function createObstacle() {
+      const height = Math.random() * 100 + 50;
+      const y = Math.random() * (canvas.height - height);
+      obstacles.push({
+        x: canvas.width,
+        y: y,
+        width: 30,
+        height: height,
+        color: "red",
+        speed: 4
+      });
+    }
+
+    function updateObstacles() {
+      obstacleTimer++;
+      if (obstacleTimer > 90) {
+        createObstacle();
+        obstacleTimer = 0;
+      }
+      obstacles.forEach(o => o.x -= o.speed);
+      obstacles = obstacles.filter(o => o.x + o.width > 0);
+    }
+
+    function drawObstacles() {
+      ctx.fillStyle = "red";
+      obstacles.forEach(o => {
+        ctx.fillRect(o.x, o.y, o.width, o.height);
+      });
+    }
+
+    function createExplosion(x, y) {
+      for (let i = 0; i < 20; i++) {
+        particles.push({
+          x: x,
+          y: y,
+          radius: Math.random() * 4 + 2,
+          dx: (Math.random() - 0.5) * 6,
+          dy: (Math.random() - 0.5) * 6,
+          alpha: 1
+        });
+      }
+    }
+
+    function updateParticles() {
+      particles.forEach(p => {
+        p.x += p.dx;
+        p.y += p.dy;
+        p.alpha -= 0.02;
+      });
+      particles = particles.filter(p => p.alpha > 0);
+    }
+
+    function drawParticles() {
+      particles.forEach(p => {
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = "orange";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+
+    function checkCollision() {
+      for (let obs of obstacles) {
+        if (
+          player.x < obs.x + obs.width &&
+          player.x + player.width > obs.x &&
+          player.y < obs.y + obs.height &&
+          player.y + player.height > obs.y
+        ) {
+          createExplosion(player.x + player.width / 2, player.y + player.height / 2);
+          isGameOver = true;
+        }
+      }
+    }
+
+    function checkBulletCollision() {
+      bullets.forEach(bullet => {
+        obstacles.forEach((obs, i) => {
+          if (
+            bullet.x < obs.x + obs.width &&
+            bullet.x + bullet.width > obs.x &&
+            bullet.y < obs.y + obs.height &&
+            bullet.y + bullet.height > obs.y
+          ) {
+            createExplosion(obs.x + obs.width / 2, obs.y + obs.height / 2);
+            obstacles.splice(i, 1);
+            bullets.splice(bullets.indexOf(bullet), 1);
+          }
+        });
+      });
+    }
+
+    function drawBackground() {
+      if (bgImage.complete) {
+        ctx.drawImage(bgImage, bgX, 0, canvas.width, canvas.height);
+        ctx.drawImage(bgImage, bgX + canvas.width, 0, canvas.width, canvas.height);
+        bgX -= bgSpeed;
+        if (bgX <= -canvas.width) bgX = 0;
+      } else {
+        ctx.fillStyle = "#222";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    function drawPlayer() {
+      ctx.fillStyle = player.color;
+      ctx.fillRect(player.x, player.y, player.width, player.height);
+    }
+
+    function showGameOver() {
+      ctx.fillStyle = "white";
+      ctx.font = "48px Arial";
+      ctx.fillText("Game Over", canvas.width / 2 - 120, canvas.height / 2);
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
+
+      if (!isGameOver) {
+        updatePlayer();
+        updateObstacles();
+        updateBullets();
+        updateParticles();
+        checkCollision();
+        checkBulletCollision();
+      }
+
+      drawObstacles();
+      drawBullets();
+      drawPlayer();
+      drawParticles();
+
+      if (isGameOver) {
+        showGameOver();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    bgImage.onload = () => gameLoop();
+  </script>
+</body>
+</html>
